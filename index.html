@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="google" content="notranslate">
-  <title>YouTube 直播即時監控助手 (YT Live Monitor)</title>
+  <title>YouTube 直播即時監控助手</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -138,21 +138,20 @@
     let isMonitoring = false;
     let timer = null;
 
-    // Web Audio 快速蜂鳴音效（發聲時間 0.15 秒）
     function playBeep() {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // 880Hz 短促鈴聲
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
         gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.15);
       } catch (e) {
-        console.log("Audio not allowed without user interaction");
+        console.log("Audio play error");
       }
     }
 
@@ -177,12 +176,10 @@
         statusText.className = 'status-value active';
         statusText.innerHTML = '<span class="pulse"></span>Monitoring / 1秒頻率監控中...';
 
-        // 預先啟動 AudioContext 權限
         playBeep();
 
-        // 立即執行一次並開啟每秒（1000ms）檢查
         checkLiveStatus(handle);
-        timer = setInterval(() => checkLiveStatus(handle), 1000);
+        timer = setInterval(() => checkLiveStatus(handle), 1200);
       } else {
         startBtn.textContent = 'Start / 開始監控';
         startBtn.classList.remove('stop');
@@ -195,14 +192,21 @@
 
     async function checkLiveStatus(handle) {
       const targetUrl = `https://www.youtube.com/${handle}/live`;
-      const corsProxy = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+      // 使用更穩定的 corsproxy.io 代理
+      const corsProxy = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
       try {
         const response = await fetch(corsProxy);
-        const data = await response.json();
+        const text = await response.text();
         
-        if (data.contents && (data.contents.includes('"isLive":true') || data.contents.includes('"isLiveNow":true'))) {
-          // 偵測到直播：短促發聲提示 + 0.2秒極速跳轉
+        // 增強型多重直播特徵匹配
+        const isLive = text.includes('"isLive":true') || 
+                       text.includes('"isLiveNow":true') || 
+                       text.includes('{"text":"LIVE"}') || 
+                       text.includes('{"text":"正在直播"}') ||
+                       (text.includes('canonical') && text.includes('/watch?v='));
+
+        if (isLive) {
           playBeep();
           document.getElementById('statusText').className = 'status-value success';
           document.getElementById('statusText').textContent = '🎉 LIVE / 正在直播！立即跳轉...';
